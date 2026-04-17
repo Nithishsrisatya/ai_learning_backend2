@@ -59,14 +59,16 @@ Provide the answer in this format:
 
       return text;
     } catch (error) {
-     console.log("Gemini FULL ERROR JSON:", JSON.stringify(error, null, 2));
+  console.error("🔥 FULL GEMINI ERROR:", error);
+  console.error("🔥 ERROR MESSAGE:", error.message);
+  console.error("🔥 ERROR STACK:", error.stack);
 
-      if (attempt === 3) {
-        throw new Error("AI generation failed after retries");
-      }
+  if (attempt === 3) {
+    throw new Error("AI generation failed after retries");
+  }
 
-      await delay(1000 * attempt); // simple backoff
-    }
+  await delay(1000 * attempt);
+}
   }
 }
 
