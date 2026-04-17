@@ -6,7 +6,7 @@ const {
   getHistory,
   deleteChat,
 } = require("../controllers/aiController");
-const authMiddleware = require("../middleware/authmiddleware");
+const authMiddleware = require("../middleware/authMiddleware");
 const { aiRequestLimiter } = require("../middleware/rateLimiter");
 
 router.post("/learn", authMiddleware, aiRequestLimiter, generateTopic);

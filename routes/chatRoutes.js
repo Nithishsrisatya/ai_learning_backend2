@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 
-const authMiddleware = require("../middleware/authmiddleware");
+const authMiddleware = require("../middleware/authMiddleware");
 
 const {
   createChat,
@@ -18,3 +18,4 @@ router.get("/messages/:sessionId", authMiddleware, getMessages);
 router.delete("/:sessionId", authMiddleware, deleteChat);
 
 module.exports = router;
+

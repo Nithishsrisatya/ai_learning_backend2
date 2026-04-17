@@ -7,9 +7,10 @@ const {
   getQuizBySession,
 } = require("../controllers/quizController");
 
-const protect = require("../middleware/authmiddleware");
+const protect = require("../middleware/authMiddleware");
 
 router.get("/:sessionId", protect, getQuizBySession);
 router.post("/generate", protect, createQuiz);
 
 module.exports = router;
+
