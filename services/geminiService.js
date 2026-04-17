@@ -1,79 +1,96 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
-// Singleton instances
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-async function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+// 🔥 Initialize Gemini
+if (!process.env.GEMINI_API_KEY) {
+  throw new Error("Missing GEMINI_API_KEY in environment variables");
 }
 
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+const model = genAI.getGenerativeModel({
+  model: "gemini-1.5-flash", // ✅ stable model
+});
+
+// 🔁 Delay helper
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// =========================
+// ✅ GENERATE EXPLANATION
+// =========================
 async function generateExplanation(topic, chatContext = "") {
-  // Retry logic with backoff
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       let prompt = `You are a helpful tutor explaining programming concepts to beginner students.`;
 
       if (chatContext) {
-        prompt += `\n\nConversation context:\n${chatContext}\n\nContinue the conversation naturally, maintaining context from previous messages.`;
+        prompt += `\n\nConversation context:\n${chatContext}\n\nContinue the conversation naturally.`;
       } else {
-        prompt += ` Explain the topic "${topic}" for a beginner student.`;
+        prompt += `\nExplain the topic "${topic}" for a beginner student.`;
       }
 
       prompt += `
 
-Provide the answer in this exact format:
+Provide the answer in this format:
 
 1. Definition
 2. Simple Explanation
 3. Example
 4. Real-world Use Case
-5. Short Summary`;
+5. Short Summary
+`;
 
-      const result = await model.generateContent(prompt);
-      return await result.response.text();
+      // ✅ Correct Gemini call
+      const result = await model.generateContent({
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: prompt }],
+          },
+        ],
+      });
+
+      // ✅ Safe extraction
+      const text =
+        result.response?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+      if (!text) {
+        throw new Error("Empty response from Gemini");
+      }
+
+      return text;
     } catch (error) {
-      console.error(
-        `Gemini explanation attempt ${attempt} failed for "${topic}":`,
-        error.message,
-      );
+      console.error(`❌ Attempt ${attempt} failed:`, error);
 
-      if (error.status === 429 && error.errorDetails?.[2]?.retryDelay) {
-        const delayMs =
-          parseInt(error.errorDetails[2].retryDelay) * 1000 + 1000 * attempt;
-        await delay(delayMs);
-      } else if (attempt === 3) {
+      if (attempt === 3) {
         throw new Error("AI generation failed after retries");
       }
+
+      await delay(1000 * attempt); // simple backoff
     }
   }
 }
 
+// =========================
+// ✅ GENERATE QUIZ
+// =========================
 async function generateQuiz(topic, chatContext = "") {
-  const model = genAI.getGenerativeModel({
-    model: "gemini-2.5-flash",
-  });
+  try {
+    let prompt = `
+Generate 5 multiple choice questions about "${topic}".
+`;
 
-  let prompt = `
-Generate 5 multiple choice questions about ${topic}.`;
+    if (chatContext) {
+      prompt += `
 
-  if (chatContext) {
-    prompt += `
-
-Based on this conversation context:
+Based on this conversation:
 
 ${chatContext}
+`;
+    }
 
-Make questions specifically from the session content.`;
-  } else {
     prompt += `
 
-General questions on the topic.`;
-  }
-
-  prompt += `
-
-Return ONLY valid JSON array. No markdown, no extra text.
+Return ONLY valid JSON array.
 
 Format:
 [
@@ -81,20 +98,35 @@ Format:
     "question": "Question text?",
     "options": ["A) option1", "B) option2", "C) option3", "D) option4"],
     "answer": "A) option1",
-    "explanation": "Short explanation why this is correct."
+    "explanation": "Short explanation"
   }
 ]
 `;
 
-  const result = await model.generateContent(prompt);
+    const result = await model.generateContent({
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: prompt }],
+        },
+      ],
+    });
 
-  const text = result.response.text();
+    const text =
+      result.response?.candidates?.[0]?.content?.parts?.[0]?.text;
 
-  return text;
+    if (!text) {
+      throw new Error("Empty quiz response");
+    }
+
+    return text;
+  } catch (error) {
+    console.error("❌ Quiz generation failed:", error);
+    throw new Error("Quiz generation failed");
+  }
 }
 
 module.exports = {
   generateExplanation,
   generateQuiz,
 };
-console.log("API KEY:", process.env.GEMINI_API_KEY);
