@@ -59,7 +59,7 @@ Provide the answer in this format:
 
       return text;
     } catch (error) {
-      console.error(`❌ Attempt ${attempt} failed:`, error);
+     console.log("Gemini FULL ERROR JSON:", JSON.stringify(error, null, 2));
 
       if (attempt === 3) {
         throw new Error("AI generation failed after retries");
