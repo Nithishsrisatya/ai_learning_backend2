@@ -18,17 +18,16 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // ✅ GENERATE EXPLANATION
 // =========================
 async function generateExplanation(topic, chatContext = "") {
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      let prompt = `You are a helpful tutor explaining programming concepts to beginner students.`;
+  try {
+    let prompt = `You are a helpful tutor explaining programming concepts to beginner students.`;
 
-      if (chatContext) {
-        prompt += `\n\nConversation context:\n${chatContext}\n\nContinue the conversation naturally.`;
-      } else {
-        prompt += `\nExplain the topic "${topic}" for a beginner student.`;
-      }
+    if (chatContext) {
+      prompt += `\n\nConversation context:\n${chatContext}\n\nContinue the conversation naturally.`;
+    } else {
+      prompt += `\nExplain the topic "${topic}" for a beginner student.`;
+    }
 
-      prompt += `
+    prompt += `
 
 Provide the answer in this format:
 
@@ -39,36 +38,30 @@ Provide the answer in this format:
 5. Short Summary
 `;
 
-      // ✅ Correct Gemini call
-      const result = await model.generateContent({
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: prompt }],
-          },
-        ],
-      });
+    // ✅ Correct Gemini call
+    const result = await model.generateContent({
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: prompt }],
+        },
+      ],
+    });
 
-      // ✅ Safe extraction
-      const text =
-        result.response?.candidates?.[0]?.content?.parts?.[0]?.text;
+    // ✅ Safe extraction
+    const text =
+      result.response?.candidates?.[0]?.content?.parts?.[0]?.text;
 
-      if (!text) {
-        throw new Error("Empty response from Gemini");
-      }
+    if (!text) {
+      throw new Error("Empty response from Gemini");
+    }
 
-      return text;
-    } catch (error) {
-  console.error("🔥 FULL GEMINI ERROR:", error);
-  console.error("🔥 ERROR MESSAGE:", error.message);
-  console.error("🔥 ERROR STACK:", error.stack);
-
-  if (attempt === 3) {
-    throw new Error("AI generation failed after retries");
-  }
-
-  await delay(1000 * attempt);
-}
+    return text;
+  } catch (error) {
+    console.error("🔥 FULL GEMINI ERROR:", error);
+    console.error("🔥 ERROR MESSAGE:", error.message);
+    console.error("🔥 ERROR STACK:", error.stack);
+    throw new Error("AI generation failed");
   }
 }
 

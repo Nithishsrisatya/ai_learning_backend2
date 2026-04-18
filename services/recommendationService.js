@@ -30,44 +30,29 @@ async function suggestNextTopic(history) {
     return cached.result;
   }
 
-  // Retry logic with backoff
-  let lastError = null;
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      const prompt = `A student has learned these topics: ${history.join(", ")}.
+  try {
+    const prompt = `A student has learned these topics: ${history.join(", ")}.
 
 Suggest the next SINGLE topic they should learn. Respond with ONLY the topic name.`;
 
-      const result = await model.generateContent(prompt);
-      const suggestion = await result.response.text();
+    const result = await model.generateContent(prompt);
+    const suggestion = await result.response.text();
 
-      // Cache hit
-      cache.set(historyStr, {
-        result: suggestion.trim(),
-        timestamp: Date.now(),
-      });
-      return suggestion.trim();
-    } catch (error) {
-      console.error(`Gemini attempt ${attempt} failed:`, error.message);
-      lastError = error;
-
-      if (error.status === 429 && error.errorDetails?.[2]?.retryDelay) {
-        const delayMs =
-          parseInt(error.errorDetails[2].retryDelay) * 1000 + 1000 * attempt;
-        await delay(delayMs);
-      } else if (attempt === 3) {
-        break;
-      }
-    }
+    // Cache success
+    cache.set(historyStr, {
+      result: suggestion.trim(),
+      timestamp: Date.now(),
+    });
+    return suggestion.trim();
+  } catch (error) {
+    console.error("Gemini recommendation failed:", error.message);
+    console.warn("Using fallback recommendation due to API failure");
+    const learnedCount = history.length;
+    const fallbackIndex = learnedCount % fallbackTopics.length;
+    const fallback = fallbackTopics[fallbackIndex];
+    cache.set(historyStr, { result: fallback, timestamp: Date.now() });
+    return fallback;
   }
-
-  // Fallback
-  console.warn("Using fallback recommendation due to API failure");
-  const learnedCount = history.length;
-  const fallbackIndex = learnedCount % fallbackTopics.length;
-  const fallback = fallbackTopics[fallbackIndex];
-  cache.set(historyStr, { result: fallback, timestamp: Date.now() });
-  return fallback;
 }
 
 module.exports = suggestNextTopic;

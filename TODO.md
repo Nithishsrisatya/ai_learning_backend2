@@ -1,1 +1,12 @@
-# TODO: Fix auth middleware import casing\n\n✅ Edit routes/chatRoutes.js: replace import path\n✅ Edit routes/quizRoutes.js: replace import path\n✅ Edit routes/recommendRoutes.js: replace import path\n✅ Edit routes/authRoutes.js: replace import path\n✅ Edit routes/aiRoutes.js: replace import path\n- [ ] Verify TypeScript errors gone\n✅ (Done) attempt_completion
+# Task: Remove retries from service files
+
+## Steps:
+- [x] Create TODO.md with plan steps
+- [x] Edit services/geminiService.js - remove retry loop from generateExplanation()
+- [x] Edit services/recommendationService.js - remove retry loop from suggestNextTopic()
+- [x] Test the updated functions/endpoints
+- [x] Mark complete and attempt_completion
+
+## Task Complete ✅
+All retry loops removed successfully from both service files. Functions now use single try-catch blocks without loops or delays.
+
