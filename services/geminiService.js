@@ -1,67 +1,67 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
-// 🔥 Initialize Gemini
+// 🔥 Check API Key
 if (!process.env.GEMINI_API_KEY) {
   throw new Error("Missing GEMINI_API_KEY in environment variables");
 }
 
+// 🔥 Init Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
+// ✅ Use stable model
 const model = genAI.getGenerativeModel({
-  model: "gemini-1.5-flash", // ✅ stable model
+  model: "gemini-1.5-flash",
 });
 
-// 🔁 Delay helper
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// =========================
+// ✅ SAFE TEXT EXTRACTOR
+// =========================
+function extractText(result) {
+  return (
+    result?.response?.candidates?.[0]?.content?.parts?.[0]?.text ||
+    result?.candidates?.[0]?.content?.parts?.[0]?.text ||
+    null
+  );
+}
 
 // =========================
 // ✅ GENERATE EXPLANATION
 // =========================
 async function generateExplanation(topic, chatContext = "") {
   try {
-    let prompt = `You are a helpful tutor explaining programming concepts to beginner students.`;
+    let prompt = `You are a helpful tutor explaining concepts for beginners.`;
 
     if (chatContext) {
-      prompt += `\n\nConversation context:\n${chatContext}\n\nContinue the conversation naturally.`;
+      prompt += `\n\nConversation:\n${chatContext}`;
     } else {
-      prompt += `\nExplain the topic "${topic}" for a beginner student.`;
+      prompt += `\nExplain the topic "${topic}".`;
     }
 
     prompt += `
 
-Provide the answer in this format:
-
+Provide:
 1. Definition
 2. Simple Explanation
 3. Example
 4. Real-world Use Case
-5. Short Summary
+5. Summary
 `;
 
-    // ✅ Correct Gemini call
     const result = await model.generateContent({
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: prompt }],
-        },
-      ],
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
     });
 
-    // ✅ Safe extraction
-    const text =
-      result.response?.candidates?.[0]?.content?.parts?.[0]?.text;
+    const text = extractText(result);
 
-    if (!text) {
-      throw new Error("Empty response from Gemini");
-    }
+    console.log("🧠 EXPLANATION RAW:", text);
+
+    if (!text) throw new Error("Empty response from Gemini");
 
     return text;
+
   } catch (error) {
-    console.error("🔥 FULL GEMINI ERROR:", error);
-    console.error("🔥 ERROR MESSAGE:", error.message);
-    console.error("🔥 ERROR STACK:", error.stack);
-    throw new Error("AI generation failed");
+    console.error("❌ EXPLANATION ERROR:", error.message);
+    throw new Error("AI explanation failed");
   }
 }
 
@@ -71,34 +71,27 @@ Provide the answer in this format:
 async function generateQuiz(prompt) {
   try {
     const result = await model.generateContent({
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: prompt }],
-        },
-      ],
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
     });
 
-    const text =
-  result?.response?.candidates?.[0]?.content?.parts?.[0]?.text ||
-  result?.candidates?.[0]?.content?.parts?.[0]?.text;
-console.log("🤖 FULL RESULT:", JSON.stringify(result, null, 2));
-console.log("🤖 QUIZ RAW:", text);
+    const text = extractText(result);
+
     console.log("🤖 QUIZ RAW:", text);
 
-    if (!text) {
-      throw new Error("Empty quiz response");
-    }
+    if (!text) throw new Error("Empty quiz response");
 
     return text;
+
   } catch (error) {
-    console.error("❌ Quiz generation failed:", error);
+    console.error("❌ QUIZ ERROR:", error.message);
     throw new Error("Quiz generation failed");
   }
 }
 
+// =========================
+// EXPORTS
+// =========================
 module.exports = {
   generateExplanation,
   generateQuiz,
 };
-
