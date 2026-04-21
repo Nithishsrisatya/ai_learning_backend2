@@ -50,8 +50,7 @@ Provide the answer in this format:
 
     // ✅ Safe extraction
     const text =
-  result?.response?.candidates?.[0]?.content?.parts?.[0]?.text ||
-  result?.candidates?.[0]?.content?.parts?.[0]?.text;
+      result.response?.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!text) {
       throw new Error("Empty response from Gemini");
@@ -81,8 +80,10 @@ async function generateQuiz(prompt) {
     });
 
     const text =
-      result.response?.candidates?.[0]?.content?.parts?.[0]?.text;
-
+  result?.response?.candidates?.[0]?.content?.parts?.[0]?.text ||
+  result?.candidates?.[0]?.content?.parts?.[0]?.text;
+console.log("🤖 FULL RESULT:", JSON.stringify(result, null, 2));
+console.log("🤖 QUIZ RAW:", text);
     console.log("🤖 QUIZ RAW:", text);
 
     if (!text) {
