@@ -11,6 +11,7 @@ module.exports.createQuiz = async (req, res) => {
       timer, // optional
     } = req.body;
 
+    const userId = req.userId || "testUser";
     const { topic } = req.body;
 
     if (!topic) {
@@ -26,7 +27,7 @@ module.exports.createQuiz = async (req, res) => {
     // 🔁 Reuse quiz if same content + same config
     const existingQuiz = await Quiz.findOne({
       sessionId,
-      userId: req.userId,
+      userId: userId,
       messageCount,
       numQuestions,
       difficulty,
@@ -75,7 +76,15 @@ Return ONLY JSON format:
       return res.status(500).json({ message: "Invalid quiz format from AI" });
     }
 
-    let questions = JSON.parse(jsonMatch[0]);
+    let questions;
+    try {
+      questions = JSON.parse(jsonMatch[0]);
+    } catch (err) {
+      console.error("❌ JSON PARSE ERROR:", jsonMatch[0]);
+      return res.status(500).json({
+        message: "Invalid JSON from AI",
+      });
+    }
 
     // ✅ Ensure explanation exists (only for practice)
     if (mode === "practice") {
@@ -93,10 +102,10 @@ Return ONLY JSON format:
 
     // 💾 Save quiz
     const quiz = await Quiz.findOneAndUpdate(
-      { sessionId, userId: req.userId },
+      { sessionId, userId: userId },
       {
         sessionId,
-        userId: req.userId,
+        userId: userId,
         questions,
         messageCount,
         numQuestions,
@@ -118,11 +127,12 @@ Return ONLY JSON format:
 
 module.exports.getQuizBySession = async (req, res) => {
   try {
+    const userId = req.userId || "testUser";
     const { sessionId } = req.params;
 
     const quiz = await Quiz.findOne({
       sessionId,
-      userId: req.userId,
+      userId: userId
     });
 
     if (!quiz) {
