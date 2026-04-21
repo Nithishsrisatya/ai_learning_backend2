@@ -68,36 +68,8 @@ Provide the answer in this format:
 // =========================
 // ✅ GENERATE QUIZ
 // =========================
-async function generateQuiz(topic, chatContext = "") {
+async function generateQuiz(prompt) {
   try {
-    let prompt = `
-Generate 5 multiple choice questions about "${topic}".
-`;
-
-    if (chatContext) {
-      prompt += `
-
-Based on this conversation:
-
-${chatContext}
-`;
-    }
-
-    prompt += `
-
-Return ONLY valid JSON array.
-
-Format:
-[
-  {
-    "question": "Question text?",
-    "options": ["A) option1", "B) option2", "C) option3", "D) option4"],
-    "answer": "A) option1",
-    "explanation": "Short explanation"
-  }
-]
-`;
-
     const result = await model.generateContent({
       contents: [
         {
@@ -108,7 +80,9 @@ Format:
     });
 
     const text =
-      result.candidates?.[0]?.content?.parts?.[0]?.text;
+      result.response?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    console.log("🤖 QUIZ RAW:", text);
 
     if (!text) {
       throw new Error("Empty quiz response");
@@ -125,3 +99,4 @@ module.exports = {
   generateExplanation,
   generateQuiz,
 };
+
