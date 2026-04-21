@@ -50,7 +50,8 @@ Provide the answer in this format:
 
     // ✅ Safe extraction
     const text =
-      result.response?.candidates?.[0]?.content?.parts?.[0]?.text;
+  result?.response?.candidates?.[0]?.content?.parts?.[0]?.text ||
+  result?.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!text) {
       throw new Error("Empty response from Gemini");
