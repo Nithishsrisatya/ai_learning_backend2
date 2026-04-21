@@ -1,5 +1,4 @@
 const Quiz = require("../models/Quiz");
-const ChatMessage = require("../models/ChatMessage");
 const { generateQuiz } = require("../services/geminiService");
 
 module.exports.createQuiz = async (req, res) => {
@@ -12,21 +11,17 @@ module.exports.createQuiz = async (req, res) => {
       timer, // optional
     } = req.body;
 
+    const { topic } = req.body;
+
+    if (!topic) {
+      return res.status(400).json({ message: "Topic is required" });
+    }
+
+    const messageCount = 0; // since no chat is used
+
     if (!sessionId) {
       return res.status(400).json({ message: "Session ID is required" });
     }
-
-    const messages = await ChatMessage.find({ sessionId }).sort({
-      createdAt: 1,
-    });
-
-    if (!messages.length) {
-      return res.status(400).json({
-        message: "No chat content available for quiz",
-      });
-    }
-
-    const messageCount = messages.length;
 
     // 🔁 Reuse quiz if same content + same config
     const existingQuiz = await Quiz.findOne({
@@ -42,11 +37,6 @@ module.exports.createQuiz = async (req, res) => {
       return res.json(existingQuiz);
     }
 
-    // 🧠 Prepare chat context
-    const chatContext = messages
-      .map((m) => `${m.role.toUpperCase()}: ${m.content}`)
-      .join("\n");
-
     // 🤖 Mode-based explanation control
     const includeExplanation =
       mode === "practice"
@@ -55,7 +45,7 @@ module.exports.createQuiz = async (req, res) => {
 
     // 🎯 AI Prompt
     const prompt = `
-Generate ${numQuestions} multiple choice questions.
+Generate ${numQuestions} multiple choice questions on the topic "${topic}".
 
 Difficulty: ${difficulty}
 ${includeExplanation}
@@ -69,9 +59,6 @@ Return ONLY JSON format:
     "explanation": "..."
   }
 ]
-
-Conversation:
-${chatContext}
 `;
 
     const quizText = await generateQuiz(prompt);
@@ -148,3 +135,4 @@ module.exports.getQuizBySession = async (req, res) => {
     res.status(500).json({ message: "Failed to fetch quiz" });
   }
 };
+
