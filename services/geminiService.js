@@ -1,6 +1,6 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
-// 🔥 Check API Key
+// 🔥 Validate API Key
 if (!process.env.GEMINI_API_KEY) {
   throw new Error("Missing GEMINI_API_KEY in environment variables");
 }
@@ -8,36 +8,52 @@ if (!process.env.GEMINI_API_KEY) {
 // 🔥 Init Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// ✅ Use stable model
+// ✅ Stable model
 const model = genAI.getGenerativeModel({
-  model: "gemini-2.5-flash",
+  model: "gemini-1.5-flash", // ⚠️ recommended stable
 });
 
 // =========================
 // ✅ SAFE TEXT EXTRACTOR
 // =========================
 function extractText(result) {
-  return (
+  const text =
     result?.response?.candidates?.[0]?.content?.parts?.[0]?.text ||
-    result?.candidates?.[0]?.content?.parts?.[0]?.text ||
-    null
-  );
+    result?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+  return text?.trim() || null;
+}
+
+// =========================
+// 🔁 RETRY HELPER
+// =========================
+async function withRetry(fn, retries = 1) {
+  try {
+    return await fn();
+  } catch (error) {
+    if (retries > 0) {
+      console.log("🔁 Retrying Gemini...");
+      return withRetry(fn, retries - 1);
+    }
+    throw error;
+  }
 }
 
 // =========================
 // ✅ GENERATE EXPLANATION
 // =========================
 async function generateExplanation(topic, chatContext = "") {
-  try {
-    let prompt = `You are a helpful tutor explaining concepts for beginners.`;
+  return withRetry(async () => {
+    try {
+      let prompt = `You are a helpful tutor explaining concepts for beginners.`;
 
-    if (chatContext) {
-      prompt += `\n\nConversation:\n${chatContext}`;
-    } else {
-      prompt += `\nExplain the topic "${topic}".`;
-    }
+      if (chatContext) {
+        prompt += `\n\nConversation:\n${chatContext}`;
+      } else {
+        prompt += `\nExplain the topic "${topic}".`;
+      }
 
-    prompt += `
+      prompt += `
 
 Provide:
 1. Definition
@@ -47,65 +63,70 @@ Provide:
 5. Summary
 `;
 
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-    });
+      const result = await model.generateContent({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+      });
 
-    const text = extractText(result);
+      // 🔍 Debug (safe log)
+      console.log("🧠 RAW RESPONSE:", result?.response);
 
-    console.log("🧠 EXPLANATION RAW:", text);
+      const text = extractText(result);
 
-    if (!text) throw new Error("Empty response from Gemini");
+      console.log("🧠 EXTRACTED TEXT:", text);
 
-    return text;
+      if (!text) {
+        throw new Error("Empty response from Gemini");
+      }
 
-  } catch (error) {
-    console.error("❌ EXPLANATION ERROR:", error.message);
-    throw new Error("AI explanation failed");
-  }
+      return text;
+
+    } catch (error) {
+      console.error("🔥 GEMINI EXPLANATION ERROR:", error.message);
+
+      // ✅ fallback (NO 500 error)
+      return "AI couldn't generate explanation. Please try again.";
+    }
+  });
 }
 
 // =========================
 // ✅ GENERATE QUIZ
 // =========================
 async function generateQuiz(prompt) {
-  try {
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-    });
+  return withRetry(async () => {
+    try {
+      const result = await model.generateContent({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+      });
 
-    const text = extractText(result);
+      console.log("🤖 RAW RESPONSE:", result?.response);
 
-    console.log("🤖 QUIZ RAW:", text);
+      const text = extractText(result);
 
-    if (!text) {
-      console.error("⚠️ Gemini returned empty response:", result);
-      throw new Error("Empty quiz response");
-    }
+      console.log("🤖 QUIZ TEXT:", text);
 
-    return text;
-
-  } catch (error) {
-    console.error("❌ FULL QUIZ ERROR:", error);
-
-    // show real API error if exists
-    if (error.response) {
-      console.error("❌ RESPONSE DATA:", error.response.data);
-    }
-
-    // ✅ fallback quiz (so your app works)
-    console.error("❌ Gemini Failed, using fallback");
-    return `
-    [
-      {
-        "question": "What is 2 + 2?",
-        "options": ["1", "2", "3", "4"],
-        "answer": "4",
-        "explanation": "2 + 2 equals 4"
+      if (!text) {
+        throw new Error("Empty quiz response");
       }
-    ]
-    `;
+
+      return text;
+
+    } catch (error) {
+      console.error("🔥 GEMINI QUIZ ERROR:", error.message);
+
+      // ✅ fallback quiz (never break app)
+      return `
+[
+  {
+    "question": "What is 2 + 2?",
+    "options": ["1", "2", "3", "4"],
+    "answer": "4",
+    "explanation": "2 + 2 equals 4"
   }
+]
+`;
+    }
+  });
 }
 
 // =========================
@@ -115,4 +136,3 @@ module.exports = {
   generateExplanation,
   generateQuiz,
 };
-
