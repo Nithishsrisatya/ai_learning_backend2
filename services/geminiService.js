@@ -67,6 +67,9 @@ Provide:
         contents: [{ role: "user", parts: [{ text: prompt }] }],
       });
 
+      // 🔥 ADD THIS LINE HERE
+      console.log("🧠 FULL GEMINI RESPONSE:", JSON.stringify(result, null, 2));
+
       // 🔍 Debug (safe log)
       console.log("🧠 RAW RESPONSE:", result?.response);
 
