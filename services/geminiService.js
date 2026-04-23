@@ -8,21 +8,17 @@ if (!process.env.GEMINI_API_KEY) {
 // 🔥 Init Gemini
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// ✅ Stable model
-const model = genAI.getGenerativeModel({
-  model: "gemini-1.5-flash", // ⚠️ recommended stable
+// ✅ Standard model with a System Instruction for explanations
+const tutorModel = genAI.getGenerativeModel({
+  model: "gemini-2.5-flash",
+  systemInstruction: "You are a helpful tutor explaining concepts for beginners. Always provide: 1. Definition, 2. Simple Explanation, 3. Example, 4. Real-world Use Case, 5. Summary.",
 });
 
-// =========================
-// ✅ SAFE TEXT EXTRACTOR
-// =========================
-function extractText(result) {
-  const text =
-    result?.response?.candidates?.[0]?.content?.parts?.[0]?.text ||
-    result?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-  return text?.trim() || null;
-}
+// ✅ Specialized model FORCED to output valid JSON for quizzes
+const jsonModel = genAI.getGenerativeModel({
+  model: "gemini-2.5-flash",
+  generationConfig: { responseMimeType: "application/json" },
+});
 
 // =========================
 // 🔁 RETRY HELPER
@@ -45,48 +41,23 @@ async function withRetry(fn, retries = 1) {
 async function generateExplanation(topic, chatContext = "") {
   return withRetry(async () => {
     try {
-      let prompt = `You are a helpful tutor explaining concepts for beginners.`;
-
+      let promptText = `Explain the topic "${topic}".`;
+      
       if (chatContext) {
-        prompt += `\n\nConversation:\n${chatContext}`;
-      } else {
-        prompt += `\nExplain the topic "${topic}".`;
+        promptText = `Conversation:\n${chatContext}\n\n${promptText}`;
       }
 
-      prompt += `
-
-Provide:
-1. Definition
-2. Simple Explanation
-3. Example
-4. Real-world Use Case
-5. Summary
-`;
-
-      const result = await model.generateContent({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-      });
-
-      // 🔥 ADD THIS LINE HERE
-      console.log("🧠 FULL GEMINI RESPONSE:", JSON.stringify(result, null, 2));
-
-      // 🔍 Debug (safe log)
-      console.log("🧠 RAW RESPONSE:", result?.response);
-
-      const text = extractText(result);
-
-      console.log("🧠 EXTRACTED TEXT:", text);
-
+      const result = await tutorModel.generateContent(promptText);
+      const text = result.response.text(); 
+      
       if (!text) {
         throw new Error("Empty response from Gemini");
       }
-
+      
       return text;
 
     } catch (error) {
       console.error("🔥 GEMINI EXPLANATION ERROR:", error.message);
-
-      // ✅ fallback (NO 500 error)
       return "AI couldn't generate explanation. Please try again.";
     }
   });
@@ -98,36 +69,27 @@ Provide:
 async function generateQuiz(prompt) {
   return withRetry(async () => {
     try {
-      const result = await model.generateContent({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-      });
-
-      console.log("🤖 RAW RESPONSE:", result?.response);
-
-      const text = extractText(result);
-
-      console.log("🤖 QUIZ TEXT:", text);
+      // Using the jsonModel guarantees strict, clean JSON output without markdown backticks
+      const result = await jsonModel.generateContent(prompt);
+      const text = result.response.text();
 
       if (!text) {
         throw new Error("Empty quiz response");
       }
-
+      
       return text;
 
     } catch (error) {
       console.error("🔥 GEMINI QUIZ ERROR:", error.message);
-
-      // ✅ fallback quiz (never break app)
-      return `
-[
-  {
-    "question": "What is 2 + 2?",
-    "options": ["1", "2", "3", "4"],
-    "answer": "4",
-    "explanation": "2 + 2 equals 4"
-  }
-]
-`;
+      // Fallback JSON string ensuring the frontend parsing doesn't crash
+      return JSON.stringify([
+        {
+          question: "What is 2 + 2?",
+          options: ["1", "2", "3", "4"],
+          answer: "4",
+          explanation: "2 + 2 equals 4"
+        }
+      ]);
     }
   });
 }

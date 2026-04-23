@@ -7,67 +7,77 @@ exports.sendMessage = async (req, res) => {
   try {
     const { sessionId, message } = req.body;
 
-    let session = await ChatSession.findById(sessionId);
-
-    if (!session) {
-      return res.status(404).json({
-        message: "Chat session not found",
-      });
+    // 1. Fetch session and VALIDATE OWNERSHIP
+    const session = await ChatSession.findById(sessionId);
+    if (!session || session.userId.toString() !== req.userId.toString()) {
+      return res.status(404).json({ message: "Chat session not found or unauthorized" });
     }
 
-    // Save user message
+    // 2. Fetch ONLY the last 10 messages for context to save Gemini tokens
+    // We sort descending to get the newest, limit to 10, then reverse to chronological order
+    const recentMessages = await ChatMessage.find({ sessionId })
+      .sort({ createdAt: -1 })
+      .limit(10);
+    recentMessages.reverse();
+
+    const chatContext = recentMessages
+      .map((m) => `${m.role.toUpperCase()}: ${m.content}`)
+      .join("\n");
+
+    // 3. Save the NEW user message to the database
     await ChatMessage.create({
       sessionId,
       role: "user",
       content: message,
     });
 
-    // Get previous messages for context (includes just-saved user message)
-    const messages = await ChatMessage.find({ sessionId }).sort({
-      createdAt: 1,
-    });
-
-    const chatContext = messages
-      .map((m) => `${m.role.toUpperCase()}: ${m.content}`)
-      .join("\n");
-
-    // Generate AI response with full context
+    // 4. Generate AI response
+    // Notice how `chatContext` only has the past history, and `message` is the new prompt.
     const aiResponse = await generateExplanation(message, chatContext);
 
-    // Save AI message
+    // 5. Save AI message
     await ChatMessage.create({
       sessionId,
       role: "ai",
       content: aiResponse,
     });
 
-    // If first message -> set chat title
-    if (session.title === "New Chat") {
-      session.title = message.slice(0, 30);
+    // 6. If first message -> set chat title
+    if (session.title === "New Chat" || !session.title) {
+      session.title = message.slice(0, 30) + "...";
       await session.save();
     }
 
-    res.json({
-      reply: aiResponse,
-    });
+    res.json({ reply: aiResponse });
+    
   } catch (error) {
-    console.error(error);
+    console.error("🔥 Send Message Error:", error);
     res.status(500).json({ message: "Failed to send message" });
   }
 };
 
 exports.createChat = async (req, res) => {
-  const session = await ChatSession.create({
-    userId: req.userId,
-  });
-  res.json(session);
+  try {
+    const session = await ChatSession.create({
+      userId: req.userId,
+      title: "New Chat", // Good practice to default this
+    });
+    res.status(201).json(session);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Failed to create chat session" });
+  }
 };
 
 exports.getHistory = async (req, res) => {
-  const sessions = await ChatSession.find({
-    userId: req.userId,
-  }).sort({ createdAt: -1 });
-  res.json(sessions);
+  try {
+    const sessions = await ChatSession.find({ userId: req.userId })
+      .sort({ createdAt: -1 });
+    res.json(sessions);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Failed to fetch chat history" });
+  }
 };
 
 exports.getMessages = async (req, res) => {
@@ -78,11 +88,15 @@ exports.getMessages = async (req, res) => {
       return res.status(400).json({ message: "Invalid session ID" });
     }
 
-    const messages = await ChatMessage.find({ sessionId }).sort({
-      createdAt: 1,
-    });
+    // Security Check: Does this user own this session?
+    const session = await ChatSession.findById(sessionId);
+    if (!session || session.userId.toString() !== req.userId.toString()) {
+      return res.status(403).json({ message: "Unauthorized access to messages" });
+    }
 
+    const messages = await ChatMessage.find({ sessionId }).sort({ createdAt: 1 });
     res.json(messages);
+
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Failed to fetch messages" });
@@ -90,9 +104,21 @@ exports.getMessages = async (req, res) => {
 };
 
 exports.deleteChat = async (req, res) => {
-  await ChatSession.findByIdAndDelete(req.params.sessionId);
-  await ChatMessage.deleteMany({
-    sessionId: req.params.sessionId,
-  });
-  res.json({ message: "Chat deleted" });
+  try {
+    const { sessionId } = req.params;
+
+    // Security Check
+    const session = await ChatSession.findById(sessionId);
+    if (!session || session.userId.toString() !== req.userId.toString()) {
+      return res.status(403).json({ message: "Unauthorized to delete this chat" });
+    }
+
+    await ChatSession.findByIdAndDelete(sessionId);
+    await ChatMessage.deleteMany({ sessionId });
+    
+    res.json({ message: "Chat successfully deleted" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Failed to delete chat" });
+  }
 };

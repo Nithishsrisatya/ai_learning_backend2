@@ -3,31 +3,35 @@ const { generateQuiz } = require("../services/geminiService");
 
 module.exports.createQuiz = async (req, res) => {
   try {
-    const {
+    let {
       sessionId,
       numQuestions = 5,
       difficulty = "medium",
       mode = "practice", // practice | exam
       timer, // optional
+      topic
     } = req.body;
 
-    const userId = req.userId || "testUser";
-    const { topic } = req.body;
-
-    if (!topic) {
-      return res.status(400).json({ message: "Topic is required" });
+    // 🔥 1. Strict Auth Check (No 'testUser' fallback)
+    const userId = req.userId;
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized: User ID missing" });
     }
 
-    const messageCount = 0; // since no chat is used
-
-    if (!sessionId) {
-      return res.status(400).json({ message: "Session ID is required" });
+    if (!topic || !sessionId) {
+      return res.status(400).json({ message: "Topic and Session ID are required" });
     }
+
+    // 🔥 2. Bounds Checking for API Protection
+    // Ensure numQuestions is an integer between 1 and 15
+    numQuestions = Math.min(Math.max(parseInt(numQuestions) || 5, 1), 15);
+
+    const messageCount = 0; 
 
     // 🔁 Reuse quiz if same content + same config
     const existingQuiz = await Quiz.findOne({
       sessionId,
-      userId: userId,
+      userId,
       messageCount,
       numQuestions,
       difficulty,
@@ -39,73 +43,49 @@ module.exports.createQuiz = async (req, res) => {
     }
 
     // 🤖 Mode-based explanation control
-    const includeExplanation =
-      mode === "practice"
-        ? "Include explanation for each question."
-        : "Do NOT include explanation.";
+    const includeExplanation = mode === "practice"
+        ? "Include a detailed 'explanation' field for each question."
+        : "Do NOT include an 'explanation' field.";
 
-    // 🎯 AI Prompt
+    // 🎯 AI Prompt (Streamlined since Gemini 2.5 Flash handles JSON natively now)
     const prompt = `
-Generate ${numQuestions} multiple choice questions on the topic "${topic}".
-
-Difficulty: ${difficulty}
-${includeExplanation}
-
-Return ONLY JSON format:
-[
-  {
-    "question": "...",
-    "options": ["A", "B", "C", "D"],
-    "answer": "A",
-    "explanation": "..."
-  }
-]
-`;
+      Generate exactly ${numQuestions} multiple choice questions on the topic "${topic}".
+      Difficulty level: ${difficulty}.
+      ${includeExplanation}
+      
+      Respond with a JSON array of objects. Each object must have: 
+      "question" (string), "options" (array of 4 strings), "answer" (string matching one option).
+    `;
 
     const quizText = await generateQuiz(prompt);
 
-    // 🧹 Clean AI response
-    let cleanedText = quizText
-      .replace(/```json/g, "")
-      .replace(/```/g, "")
-      .trim();
-
-    const jsonMatch = cleanedText.match(/\[.*\]/s);
-
-    if (!jsonMatch) {
-      return res.status(500).json({ message: "Invalid quiz format from AI" });
-    }
-
     let questions;
     try {
-      questions = JSON.parse(jsonMatch[0]);
+      // 🔥 3. Direct Parse (Safe now because of responseMimeType in service)
+      questions = JSON.parse(quizText);
     } catch (err) {
-      console.error("❌ JSON PARSE ERROR:", jsonMatch[0]);
-      return res.status(500).json({
-        message: "Invalid JSON from AI",
-      });
+      console.error("❌ JSON PARSE ERROR:", err.message, "\nRAW TEXT:", quizText);
+      return res.status(500).json({ message: "Failed to parse AI generated quiz." });
     }
 
     // ✅ Ensure explanation exists (only for practice)
     if (mode === "practice") {
       questions.forEach((q) => {
         if (!q.explanation) {
-          q.explanation = `Correct answer is ${q.answer}`;
+          q.explanation = `The correct answer is ${q.answer}.`;
         }
       });
     } else {
-      // ❌ Remove explanation for exam mode
-      questions.forEach((q) => {
-        delete q.explanation;
-      });
+      // ❌ Force remove explanation for exam mode just in case AI included it
+      questions.forEach((q) => delete q.explanation);
     }
 
-    // 💾 Save quiz
+    // 💾 Save or Update quiz
     const quiz = await Quiz.findOneAndUpdate(
-      { sessionId, userId: userId },
+      { sessionId, userId },
       {
         sessionId,
-        userId: userId,
+        userId,
         questions,
         messageCount,
         numQuestions,
@@ -113,36 +93,35 @@ Return ONLY JSON format:
         mode,
         timer: timer || null,
       },
-      { new: true, upsert: true },
+      { new: true, upsert: true }
     );
 
     res.json(quiz);
+    
   } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      message: "Quiz generation failed",
-    });
+    console.error("🔥 Create Quiz Error:", error);
+    res.status(500).json({ message: "Quiz generation failed" });
   }
 };
 
 module.exports.getQuizBySession = async (req, res) => {
   try {
-    const userId = req.userId || "testUser";
+    const userId = req.userId; // Enforce real auth
     const { sessionId } = req.params;
 
-    const quiz = await Quiz.findOne({
-      sessionId,
-      userId: userId
-    });
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const quiz = await Quiz.findOne({ sessionId, userId });
 
     if (!quiz) {
-      return res.status(404).json({ message: "No quiz found" });
+      return res.status(404).json({ message: "No quiz found for this session." });
     }
 
     res.json(quiz);
   } catch (error) {
-    console.error(error);
+    console.error("🔥 Get Quiz Error:", error);
     res.status(500).json({ message: "Failed to fetch quiz" });
   }
 };
-
