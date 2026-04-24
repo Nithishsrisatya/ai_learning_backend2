@@ -71,11 +71,21 @@ exports.createChat = async (req, res) => {
 
 exports.getHistory = async (req, res) => {
   try {
-    const sessions = await ChatSession.find({ userId: req.userId })
-      .sort({ createdAt: -1 });
+    // 1. Find all unique session IDs that actually have messages inside them
+    // This looks at the ChatMessage collection and grabs an array of active IDs
+    const activeSessionIds = await ChatMessage.distinct("sessionId");
+
+    // 2. Fetch the user's sessions, but ONLY if their ID is in that active list
+    // We also explicitly hide any leftover test sessions named "New Chat" or empty strings
+    const sessions = await ChatSession.find({ 
+      userId: req.userId,
+      _id: { $in: activeSessionIds },
+      title: { $nin: ["New Chat", "", null] } 
+    }).sort({ createdAt: -1 });
+
     res.json(sessions);
   } catch (error) {
-    console.error(error);
+    console.error("🔥 Get History Error:", error);
     res.status(500).json({ message: "Failed to fetch chat history" });
   }
 };
